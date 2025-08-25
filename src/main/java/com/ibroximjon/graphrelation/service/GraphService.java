@@ -5,8 +5,10 @@ import com.ibroximjon.graphrelation.dto.GraphResponse.Edge;
 import com.ibroximjon.graphrelation.dto.GraphResponse.Node;
 import com.ibroximjon.graphrelation.entity.Company;
 import com.ibroximjon.graphrelation.entity.CompanyPerson;
+import com.ibroximjon.graphrelation.entity.CompanyRelationship;
 import com.ibroximjon.graphrelation.entity.Person;
 import com.ibroximjon.graphrelation.repository.CompanyPersonRepository;
+import com.ibroximjon.graphrelation.repository.CompanyRelationshipRepository;
 import com.ibroximjon.graphrelation.repository.CompanyRepository;
 import com.ibroximjon.graphrelation.repository.PersonRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +23,8 @@ public class GraphService {
     private final CompanyRepository companyRepo;
     private final PersonRepository personRepo;
     private final CompanyPersonRepository cpRepo;
+    private final CompanyRelationshipRepository crRepo;  // 🔥 yangi qo‘shildi
 
-    /**
-     * Id — INN (company) yoki PINFL (person) bo‘lishi mumkin.
-     * Topilgan tugundan boshlab to‘liq grafni BFS bilan quradi.
-     */
     public GraphResponse buildFullGraph(String id) {
         Optional<Company> startCompanyOpt = companyRepo.findByInn(id);
         Optional<Person>  startPersonOpt  = personRepo.findByPinfl(id);
@@ -36,11 +35,9 @@ public class GraphService {
 
         GraphResponse resp = new GraphResponse();
 
-        // ko‘rilgan tugunlar
         Set<Long> visitedCompanies = new HashSet<>();
         Set<Long> visitedPersons   = new HashSet<>();
 
-        // BFS navbatlari
         Deque<Company> qCompany = new ArrayDeque<>();
         Deque<Person>  qPerson  = new ArrayDeque<>();
 
@@ -57,10 +54,9 @@ public class GraphService {
             qPerson.add(p);
         }
 
-        // BFS: company <-> person qatlamlari almashinadi
         while (!qCompany.isEmpty() || !qPerson.isEmpty()) {
 
-            // 1) kompaniyalardan shaxslarga
+            // --- 1) kompaniya → person
             int cs = qCompany.size();
             for (int i = 0; i < cs; i++) {
                 Company company = qCompany.pollFirst();
@@ -79,9 +75,39 @@ public class GraphService {
                         qPerson.addLast(p);
                     }
                 }
+
+                // --- 2) kompaniya → boshqa kompaniya (Founder)
+                List<CompanyRelationship> rels = crRepo.findByParentCompanyId(company.getId());
+                for (CompanyRelationship rel : rels) {
+                    Company child = rel.getChildCompany();
+
+                    addCompanyNodeOnce(resp, child);
+                    addEdgeOnce(resp, "company-" + company.getId(),
+                            "company-" + child.getId(),
+                            "FOUNDER");
+
+                    if (visitedCompanies.add(child.getId())) {
+                        qCompany.addLast(child);
+                    }
+                }
+
+                // --- 3) kompaniya ← boshqa kompaniya (kim asos solgan)
+                List<CompanyRelationship> rels2 = crRepo.findByChildCompanyId(company.getId());
+                for (CompanyRelationship rel : rels2) {
+                    Company parent = rel.getParentCompany();
+
+                    addCompanyNodeOnce(resp, parent);
+                    addEdgeOnce(resp, "company-" + parent.getId(),
+                            "company-" + company.getId(),
+                            "FOUNDER");
+
+                    if (visitedCompanies.add(parent.getId())) {
+                        qCompany.addLast(parent);
+                    }
+                }
             }
 
-            // 2) shaxslardan kompaniyalarga
+            // --- 4) shaxs → kompaniya
             int ps = qPerson.size();
             for (int i = 0; i < ps; i++) {
                 Person person = qPerson.pollFirst();
