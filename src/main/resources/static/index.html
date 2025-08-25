@@ -1,114 +1,3 @@
-<!--<!DOCTYPE html>-->
-<!--<html lang="en">-->
-<!--<head>-->
-<!--    <meta charset="UTF-8">-->
-<!--    <title>Graph Viewer</title>-->
-<!--    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>-->
-<!--    <style>-->
-<!--        body {-->
-<!--            font-family: Arial, sans-serif;-->
-<!--            margin: 20px;-->
-<!--        }-->
-<!--        #graph {-->
-<!--            width: 100%;-->
-<!--            height: 600px;-->
-<!--            border: 1px solid lightgray;-->
-<!--            margin-top: 20px;-->
-<!--        }-->
-<!--        #controls {-->
-<!--            margin-bottom: 15px;-->
-<!--        }-->
-<!--        input, select, button {-->
-<!--            padding: 6px;-->
-<!--            margin-right: 5px;-->
-<!--        }-->
-<!--        #error {-->
-<!--            color: red;-->
-<!--            font-weight: bold;-->
-<!--        }-->
-<!--    </style>-->
-<!--</head>-->
-<!--<body>-->
-<!--<h2>Company/Person Graph Viewer</h2>-->
-
-<!--<div id="controls">-->
-<!--    <label for="type">Type:</label>-->
-<!--    <select id="type">-->
-<!--        <option value="company">Company</option>-->
-<!--        <option value="person">Person</option>-->
-<!--    </select>-->
-
-<!--    <label for="regNumber">Reg Number:</label>-->
-<!--    <input type="text" id="regNumber" placeholder="e.g. REG10001" />-->
-
-<!--    <button onclick="loadGraph()">Load Graph</button>-->
-<!--</div>-->
-
-<!--<div id="error"></div>-->
-<!--<div id="graph"></div>-->
-
-<!--<script>-->
-<!--    function loadGraph() {-->
-<!--        const type = document.getElementById("type").value;-->
-<!--        const regNumber = document.getElementById("regNumber").value.trim();-->
-<!--        const errorDiv = document.getElementById("error");-->
-<!--        errorDiv.textContent = "";-->
-
-<!--        if (!regNumber) {-->
-<!--            errorDiv.textContent = "⚠️ Please enter a registration number!";-->
-<!--            return;-->
-<!--        }-->
-
-<!--        fetch(`http://localhost:8081/api/graph/${type}/${regNumber}`)-->
-<!--            .then(response => {-->
-<!--                if (!response.ok) {-->
-<!--                    throw new Error("Serverdan xato javob keldi (" + response.status + ")");-->
-<!--                }-->
-<!--                return response.json();-->
-<!--            })-->
-<!--            .then(data => {-->
-<!--                drawGraph(data);-->
-<!--            })-->
-<!--            .catch(error => {-->
-<!--                errorDiv.textContent = error.message;-->
-<!--            });-->
-<!--    }-->
-
-<!--    function drawGraph(data) {-->
-<!--        const nodes = new vis.DataSet(data.nodes.map(n => ({-->
-<!--            id: n.id,-->
-<!--            label: n.label,-->
-<!--            color: n.type === "PERSON" ? "#ffcc00" : "#66ccff",-->
-<!--            shape: n.type === "PERSON" ? "ellipse" : "box"-->
-<!--        })));-->
-
-<!--        const edges = new vis.DataSet(data.edges.map(e => ({-->
-<!--            from: e.from,-->
-<!--            to: e.to,-->
-<!--            label: e.label,-->
-<!--            arrows: "to"-->
-<!--        })));-->
-
-<!--        const container = document.getElementById("graph");-->
-<!--        const networkData = { nodes, edges };-->
-<!--        const options = {-->
-<!--            physics: {-->
-<!--                enabled: true,-->
-<!--                stabilization: { iterations: 100 }-->
-<!--            },-->
-<!--            edges: {-->
-<!--                font: { align: "middle" },-->
-<!--                smooth: true-->
-<!--            }-->
-<!--        };-->
-
-<!--        new vis.Network(container, networkData, options);-->
-<!--    }-->
-<!--</script>-->
-<!--</body>-->
-<!--</html>-->
-
-
 <!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -147,8 +36,7 @@
         const value = document.getElementById("search").value.trim();
         if (!value) { alert("INN yoki PINFL kiriting!"); return; }
 
-        // Agar index.html Spring Boot static papkadan servis qilinsa, nisbiy URL yetarli:
-        const url = `/api/v1/graph/${encodeURIComponent(value)}`;
+        const url = `http://localhost:8080/api/v1/graph/${encodeURIComponent(value)}`;
 
         fetch(url)
             .then(res => {
@@ -166,10 +54,19 @@
         const svg = d3.select("#canvas");
         svg.selectAll("*").remove();
 
-        // --- data mapping (MUHIM: from/to!)
         const links = (graph.edges || []).map(e => ({ source: e.from, target: e.to, label: e.label }));
         const nodeMap = {};
-        (graph.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+        (graph.nodes || []).forEach(n => { nodeMap[n.id] = {...n}; });
+
+        // --- Node labelga F yoki D qo‘shib qo‘yamiz
+        links.forEach(e => {
+            if (e.label === "FOUNDER" && nodeMap[e.source] && nodeMap[e.source].type === "PERSON") {
+                nodeMap[e.source].label += " (F)";
+            }
+            if (e.label === "DIRECTOR" && nodeMap[e.source] && nodeMap[e.source].type === "PERSON") {
+                nodeMap[e.source].label += " (D)";
+            }
+        });
 
         const nodes = Object.values(nodeMap);
         if (nodes.length === 0) {
@@ -177,19 +74,16 @@
             return;
         }
 
-        // force simulation
         const simulation = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id(d => d.id).distance(140))
             .force("charge", d3.forceManyBody().strength(-450))
             .force("center", d3.forceCenter(svg.node().clientWidth / 2, svg.node().clientHeight / 2));
 
-        // edges
         const link = svg.append("g").attr("stroke-width", 1.5)
             .selectAll("line")
             .data(links)
             .enter().append("line");
 
-        // nodes
         const node = svg.append("g")
             .selectAll("circle")
             .data(nodes)
@@ -198,7 +92,6 @@
             .attr("class", d => (d.type || "").toLowerCase())
             .call(drag(simulation));
 
-        // labels (node)
         const label = svg.append("g")
             .selectAll("text")
             .data(nodes)
@@ -220,7 +113,6 @@
         });
 
         function pos(obj, key) {
-            // d3 ba’zida id string bo‘ladi; mapdan obyektini olib kelamiz
             if (typeof obj === "string" && nodeMap[obj]) return nodeMap[obj][key];
             return obj[key];
         }
@@ -246,4 +138,3 @@
 </script>
 </body>
 </html>
-
