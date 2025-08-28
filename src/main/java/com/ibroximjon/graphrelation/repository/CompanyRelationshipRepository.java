@@ -15,6 +15,4 @@ public interface CompanyRelationshipRepository extends JpaRepository<CompanyRela
     // Bitta company kim tomonidan asos solinganini olish
     List<CompanyRelationship> findByChildCompanyId(Long childCompanyId);
 
-    // Duplicate tekshirish uchun
-    boolean existsByParentCompanyIdAndChildCompanyId(Long parentId, Long childId);
 }

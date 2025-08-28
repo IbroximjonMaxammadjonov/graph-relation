@@ -21,6 +21,7 @@ public class Person {
     @Column(nullable = false, unique = true, length = 14)
     private String pinfl; // Shaxsning PINFL raqami
 
+    @Column(columnDefinition = "text")
     private String fullName;
 
     @OneToMany(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)

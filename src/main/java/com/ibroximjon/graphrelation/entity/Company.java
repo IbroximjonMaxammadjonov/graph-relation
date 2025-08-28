@@ -20,7 +20,7 @@ public class Company {
 
     @Column(nullable = false, unique = true, length = 9)
     private String inn; // Kompaniya INN raqami
-
+    @Column(columnDefinition = "text")
     private String name;
 
     @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, orphanRemoval = true)

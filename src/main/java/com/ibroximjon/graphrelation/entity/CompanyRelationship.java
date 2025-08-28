@@ -3,6 +3,8 @@ package com.ibroximjon.graphrelation.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Getter
 @Setter
@@ -15,22 +17,20 @@ public class CompanyRelationship {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Asoschi bo'lgan kompaniya
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_company_id", nullable = false)
+    @JoinColumn(name = "parent_company_inn", referencedColumnName = "inn", nullable = false)
     private Company parentCompany;
 
-    // Asos solingan kompaniya
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "child_company_id", nullable = false)
+    @JoinColumn(name = "child_company_inn", referencedColumnName = "inn", nullable = false)
     private Company childCompany;
+
+    @Column(precision = 5, scale = 2)
+    private BigDecimal founderShare;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RelationType relationType;
 
-    public enum RelationType {
-        FOUNDER
-    }
+    public enum RelationType { FOUNDER }
 }
-
