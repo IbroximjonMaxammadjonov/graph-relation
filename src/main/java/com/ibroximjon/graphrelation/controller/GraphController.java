@@ -26,11 +26,13 @@ public class GraphController {
     // (xohlasangiz orqaga moslik uchun eski yo‘llar ham qolsin)
     @GetMapping("/company/{inn}")
     public GraphResponse getByCompany(@PathVariable String inn) {
+        System.out.println("inn bo'yicha izlash boshlandi....");
         return graphService.buildFullGraph(inn);
     }
 
     @GetMapping("/person/{pinfl}")
     public GraphResponse getByPerson(@PathVariable String pinfl) {
+        System.out.println("pinfl bo'yicha izlash boshlandi....");
         return graphService.buildFullGraph(pinfl);
     }
 }

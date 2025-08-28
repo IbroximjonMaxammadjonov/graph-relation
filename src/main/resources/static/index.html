@@ -7,7 +7,7 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         #toolbar { margin-bottom: 12px; }
-        input, button { padding: 8px; font-size: 14px; }
+        input, button { padding: 8px; font-size: 14px; margin-right: 5px; }
         svg { width: 100%; height: 640px; border: 1px solid #ddd; }
         circle { stroke: #333; stroke-width: 1.5px; }
         .company { fill: #8fd3ff; }
@@ -17,6 +17,7 @@
         .badge { display:inline-block; padding:2px 8px; border-radius:12px; margin-right:8px; }
         .b-company { background:#8fd3ff; }
         .b-person  { background:#a7e9af; }
+        .highlight { stroke: red !important; stroke-width: 3px !important; }
     </style>
 </head>
 <body>
@@ -24,6 +25,9 @@
 <div id="toolbar">
     <input id="search" placeholder="INN yoki PINFL kiriting (masalan: REG10001 yoki 12345678901234)" size="50"/>
     <button onclick="search()">Qidirish</button>
+    <button onclick="resetHighlight()">Reset</button>
+    <button onclick="zoomIn()">+</button>
+    <button onclick="zoomOut()">-</button>
 </div>
 <div class="legend">
     <span class="badge b-company">COMPANY</span>
@@ -32,6 +36,17 @@
 <svg id="canvas"></svg>
 
 <script>
+    const svg = d3.select("#canvas");
+    const g = svg.append("g"); // zoom uchun group
+
+    const zoom = d3.zoom()
+        .scaleExtent([0.3, 4])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+
+    svg.call(zoom);
+
     function search() {
         const value = document.getElementById("search").value.trim();
         if (!value) { alert("INN yoki PINFL kiriting!"); return; }
@@ -51,8 +66,7 @@
     }
 
     function drawGraph(graph) {
-        const svg = d3.select("#canvas");
-        svg.selectAll("*").remove();
+        g.selectAll("*").remove();
 
         const links = (graph.edges || []).map(e => ({ source: e.from, target: e.to, label: e.label }));
         const nodeMap = {};
@@ -79,12 +93,12 @@
             .force("charge", d3.forceManyBody().strength(-450))
             .force("center", d3.forceCenter(svg.node().clientWidth / 2, svg.node().clientHeight / 2));
 
-        const link = svg.append("g").attr("stroke-width", 1.5)
+        const link = g.append("g").attr("stroke-width", 1.5)
             .selectAll("line")
             .data(links)
             .enter().append("line");
 
-        const node = svg.append("g")
+        const node = g.append("g")
             .selectAll("circle")
             .data(nodes)
             .enter().append("circle")
@@ -92,7 +106,7 @@
             .attr("class", d => (d.type || "").toLowerCase())
             .call(drag(simulation));
 
-        const label = svg.append("g")
+        const label = g.append("g")
             .selectAll("text")
             .data(nodes)
             .enter().append("text")
@@ -110,6 +124,12 @@
 
             node.attr("cx", d => d.x).attr("cy", d => d.y);
             label.attr("x", d => d.x).attr("y", d => d.y);
+        });
+
+        // highlight qidiruv
+        document.getElementById("search").addEventListener("input", function() {
+            const text = this.value.toLowerCase();
+            node.classed("highlight", d => d.label.toLowerCase().includes(text));
         });
 
         function pos(obj, key) {
@@ -134,6 +154,18 @@
                     event.subject.fy = null;
                 });
         }
+    }
+
+    function resetHighlight() {
+        g.selectAll("circle").classed("highlight", false);
+        document.getElementById("search").value = "";
+    }
+
+    function zoomIn() {
+        svg.transition().call(zoom.scaleBy, 1.2);
+    }
+    function zoomOut() {
+        svg.transition().call(zoom.scaleBy, 0.8);
     }
 </script>
 </body>

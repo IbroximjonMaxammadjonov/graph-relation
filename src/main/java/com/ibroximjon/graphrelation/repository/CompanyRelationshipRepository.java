@@ -1,6 +1,7 @@
 package com.ibroximjon.graphrelation.repository;
 
 import com.ibroximjon.graphrelation.entity.CompanyRelationship;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -10,9 +11,11 @@ import java.util.List;
 public interface CompanyRelationshipRepository extends JpaRepository<CompanyRelationship, Long> {
 
     // Bitta company ning child (asos solingan) kompaniyalarini olish
+    @EntityGraph(attributePaths = {"childCompany"})
     List<CompanyRelationship> findByParentCompanyId(Long parentCompanyId);
 
     // Bitta company kim tomonidan asos solinganini olish
+    @EntityGraph(attributePaths = {"parentCompany"})
     List<CompanyRelationship> findByChildCompanyId(Long childCompanyId);
 
 }

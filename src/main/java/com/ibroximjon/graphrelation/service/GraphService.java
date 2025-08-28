@@ -23,7 +23,7 @@ public class GraphService {
     private final CompanyRepository companyRepo;
     private final PersonRepository personRepo;
     private final CompanyPersonRepository cpRepo;
-    private final CompanyRelationshipRepository crRepo;  // 🔥 yangi qo‘shildi
+    private final CompanyRelationshipRepository crRepo;
 
     public GraphResponse buildFullGraph(String id) {
         Optional<Company> startCompanyOpt = companyRepo.findByInn(id);
@@ -41,22 +41,25 @@ public class GraphService {
         Deque<Company> qCompany = new ArrayDeque<>();
         Deque<Person>  qPerson  = new ArrayDeque<>();
 
+        // 🔹 Bu setsni har so‘rovda yaratamiz
+        Set<String> existingNodes = new HashSet<>();
+        Set<String> existingEdges = new HashSet<>();
+
         if (startCompanyOpt.isPresent()) {
             Company c = startCompanyOpt.get();
-            addCompanyNodeOnce(resp, c);
+            addCompanyNodeOnce(resp, c, existingNodes);
             visitedCompanies.add(c.getId());
             qCompany.add(c);
         }
         if (startPersonOpt.isPresent()) {
             Person p = startPersonOpt.get();
-            addPersonNodeOnce(resp, p);
+            addPersonNodeOnce(resp, p, existingNodes);
             visitedPersons.add(p.getId());
             qPerson.add(p);
         }
 
         while (!qCompany.isEmpty() || !qPerson.isEmpty()) {
 
-            // --- 1) kompaniya → person
             int cs = qCompany.size();
             for (int i = 0; i < cs; i++) {
                 Company company = qCompany.pollFirst();
@@ -65,49 +68,34 @@ public class GraphService {
                 List<CompanyPerson> cps = cpRepo.findByCompany(company);
                 for (CompanyPerson cp : cps) {
                     Person p = cp.getPerson();
+                    addPersonNodeOnce(resp, p, existingNodes);
+                    addEdgeOnce(resp, "person-" + p.getId(), "company-" + company.getId(),
+                            cp.getRole().name(), existingEdges);
 
-                    addPersonNodeOnce(resp, p);
-                    addEdgeOnce(resp, "person-" + p.getId(),
-                            "company-" + company.getId(),
-                            cp.getRole().name());
-
-                    if (visitedPersons.add(p.getId())) {
-                        qPerson.addLast(p);
-                    }
+                    if (visitedPersons.add(p.getId())) qPerson.addLast(p);
                 }
 
-                // --- 2) kompaniya → boshqa kompaniya (Founder)
                 List<CompanyRelationship> rels = crRepo.findByParentCompanyId(company.getId());
                 for (CompanyRelationship rel : rels) {
                     Company child = rel.getChildCompany();
+                    addCompanyNodeOnce(resp, child, existingNodes);
+                    addEdgeOnce(resp, "company-" + company.getId(), "company-" + child.getId(),
+                            "FOUNDER", existingEdges);
 
-                    addCompanyNodeOnce(resp, child);
-                    addEdgeOnce(resp, "company-" + company.getId(),
-                            "company-" + child.getId(),
-                            "FOUNDER");
-
-                    if (visitedCompanies.add(child.getId())) {
-                        qCompany.addLast(child);
-                    }
+                    if (visitedCompanies.add(child.getId())) qCompany.addLast(child);
                 }
 
-                // --- 3) kompaniya ← boshqa kompaniya (kim asos solgan)
                 List<CompanyRelationship> rels2 = crRepo.findByChildCompanyId(company.getId());
                 for (CompanyRelationship rel : rels2) {
                     Company parent = rel.getParentCompany();
+                    addCompanyNodeOnce(resp, parent, existingNodes);
+                    addEdgeOnce(resp, "company-" + parent.getId(), "company-" + company.getId(),
+                            "FOUNDER", existingEdges);
 
-                    addCompanyNodeOnce(resp, parent);
-                    addEdgeOnce(resp, "company-" + parent.getId(),
-                            "company-" + company.getId(),
-                            "FOUNDER");
-
-                    if (visitedCompanies.add(parent.getId())) {
-                        qCompany.addLast(parent);
-                    }
+                    if (visitedCompanies.add(parent.getId())) qCompany.addLast(parent);
                 }
             }
 
-            // --- 4) shaxs → kompaniya
             int ps = qPerson.size();
             for (int i = 0; i < ps; i++) {
                 Person person = qPerson.pollFirst();
@@ -116,15 +104,11 @@ public class GraphService {
                 List<CompanyPerson> cps = cpRepo.findByPerson(person);
                 for (CompanyPerson cp : cps) {
                     Company c = cp.getCompany();
+                    addCompanyNodeOnce(resp, c, existingNodes);
+                    addEdgeOnce(resp, "person-" + person.getId(), "company-" + c.getId(),
+                            cp.getRole().name(), existingEdges);
 
-                    addCompanyNodeOnce(resp, c);
-                    addEdgeOnce(resp, "person-" + person.getId(),
-                            "company-" + c.getId(),
-                            cp.getRole().name());
-
-                    if (visitedCompanies.add(c.getId())) {
-                        qCompany.addLast(c);
-                    }
+                    if (visitedCompanies.add(c.getId())) qCompany.addLast(c);
                 }
             }
         }
@@ -132,21 +116,28 @@ public class GraphService {
         return resp;
     }
 
-    private void addCompanyNodeOnce(GraphResponse resp, Company c) {
+    private void addCompanyNodeOnce(GraphResponse resp, Company c, Set<String> existingNodes) {
         String id = "company-" + c.getId();
-        boolean exists = resp.getNodes().stream().anyMatch(n -> n.getId().equals(id));
-        if (!exists) resp.getNodes().add(new Node(id, c.getName(), "COMPANY"));
+        if (existingNodes.add(id)) {
+            resp.getNodes().add(new Node(id, c.getName(), "COMPANY"));
+        }
     }
 
-    private void addPersonNodeOnce(GraphResponse resp, Person p) {
+    private void addEdgeOnce(GraphResponse resp, String from, String to, String label, Set<String> existingEdges) {
+        String key = from + "->" + to + ":" + label;
+        if (existingEdges.add(key)) {
+            resp.getEdges().add(new Edge(from, to, label));
+        }
+    }
+
+    private void addPersonNodeOnce(GraphResponse resp, Person p, Set<String> existingNodes) {
         String id = "person-" + p.getId();
-        boolean exists = resp.getNodes().stream().anyMatch(n -> n.getId().equals(id));
-        if (!exists) resp.getNodes().add(new Node(id, p.getFullName(), "PERSON"));
-    }
-
-    private void addEdgeOnce(GraphResponse resp, String from, String to, String label) {
-        boolean exists = resp.getEdges().stream()
-                .anyMatch(e -> e.getFrom().equals(from) && e.getTo().equals(to) && Objects.equals(e.getLabel(), label));
-        if (!exists) resp.getEdges().add(new Edge(from, to, label));
+        if (existingNodes.add(id)) {
+            resp.getNodes().add(new Node(id, p.getFullName(), "PERSON"));
+        }
     }
 }
+
+
+
+
