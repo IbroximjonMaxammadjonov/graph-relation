@@ -19,6 +19,13 @@
         .b-person  { background:#a7e9af; }
         .highlight { stroke: red !important; stroke-width: 3px !important; }
 
+        /* 🔹 Asosiy qidirilgan node uchun maxsus style */
+        .main-node {
+            stroke: #ff5722 !important;
+            stroke-width: 4px !important;
+            opacity: 1 !important;
+        }
+
         /* Tooltip */
         .tooltip {
             position: absolute;
@@ -66,12 +73,14 @@
 
     const tooltip = document.getElementById("tooltip");
     let activeNode = null;
+    let mainNodeId = null;   // 🔹 qidirilgan node’ni saqlash uchun
 
     function search() {
         const value = document.getElementById("search").value.trim();
         if (!value) { alert("INN yoki PINFL kiriting!"); return; }
 
         const url = `http://localhost:8080/api/v1/graph/${encodeURIComponent(value)}`;
+        mainNodeId = value;  // 🔹 keyinchalik class berishda ishlatamiz
 
         fetch(url)
             .then(res => {
@@ -124,7 +133,11 @@
             .data(nodes)
             .enter().append("circle")
             .attr("r", 20)
-            .attr("class", d => (d.type || "").toLowerCase())
+            .attr("class", d => {
+                let cls = (d.type || "").toLowerCase();
+                if (d.id === mainNodeId) cls += " main-node"; // 🔹 Asosiy node alohida belgilanadi
+                return cls;
+            })
             .call(drag(simulation))
             .on("click", (event, d) => {
                 if (activeNode === d.id) {
@@ -132,7 +145,6 @@
                     activeNode = null;
                 } else {
                     activeNode = d.id;
-                    // Node bilan bog‘langan edge’larni topamiz
                     const related = links.filter(l => l.source.id === d.id || l.target.id === d.id);
                     let info = `<strong>${d.label}</strong><br>Type: ${d.type}<br><br>`;
                     related.forEach(r => {
@@ -171,6 +183,21 @@
             label.attr("x", d => d.x).attr("y", d => d.y);
         });
 
+        // 🔹 Graf tugagach, qidirilgan node markazga olib kelinadi
+        simulation.on("end", () => {
+            if (mainNodeId && nodeMap[mainNodeId]) {
+                const target = nodeMap[mainNodeId];
+                const svgWidth = svg.node().clientWidth;
+                const svgHeight = svg.node().clientHeight;
+
+                const transform = d3.zoomIdentity
+                    .translate(svgWidth / 2 - target.x, svgHeight / 2 - target.y)
+                    .scale(1.5);
+
+                svg.transition().duration(750).call(zoom.transform, transform);
+            }
+        });
+
         document.getElementById("search").addEventListener("input", function() {
             const text = this.value.toLowerCase();
             node.classed("highlight", d => d.label.toLowerCase().includes(text));
@@ -201,10 +228,11 @@
     }
 
     function resetHighlight() {
-        g.selectAll("circle").classed("highlight", false);
+        g.selectAll("circle").classed("highlight", false).classed("main-node", false);
         document.getElementById("search").value = "";
         tooltip.style.display = "none";
         activeNode = null;
+        mainNodeId = null;
     }
 
     function zoomIn() {
