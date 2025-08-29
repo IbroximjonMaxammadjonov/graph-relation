@@ -35,5 +35,8 @@ public class GraphController {
         System.out.println("pinfl bo'yicha izlash boshlandi....");
         return graphService.buildFullGraph(pinfl);
     }
+
+
+    //307527532
 }
 

@@ -9,7 +9,7 @@
         #toolbar { margin-bottom: 12px; }
         input, button { padding: 8px; font-size: 14px; margin-right: 5px; }
         svg { width: 100%; height: 640px; border: 1px solid #ddd; }
-        circle { stroke: #333; stroke-width: 1.5px; }
+        circle { stroke: #333; stroke-width: 1.5px; cursor: pointer; }
         .company { fill: #8fd3ff; }
         .person  { fill: #a7e9af; }
         line { stroke: #999; stroke-opacity: 0.6; }
@@ -18,12 +18,26 @@
         .b-company { background:#8fd3ff; }
         .b-person  { background:#a7e9af; }
         .highlight { stroke: red !important; stroke-width: 3px !important; }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 8px 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            display: none;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
 <h2>Company / Person — To‘liq Graph</h2>
 <div id="toolbar">
-    <input id="search" placeholder="INN yoki PINFL kiriting (masalan: REG10001 yoki 12345678901234)" size="50"/>
+    <input id="search" placeholder="INN yoki PINFL kiriting (masalan: 204510132 yoki 31806522190016)" size="50"/>
     <button onclick="search()">Qidirish</button>
     <button onclick="resetHighlight()">Reset</button>
     <button onclick="zoomIn()">+</button>
@@ -34,6 +48,9 @@
     <span class="badge b-person">PERSON</span>
 </div>
 <svg id="canvas"></svg>
+
+<!-- Tooltip element -->
+<div id="tooltip" class="tooltip"></div>
 
 <script>
     const svg = d3.select("#canvas");
@@ -46,6 +63,9 @@
         });
 
     svg.call(zoom);
+
+    const tooltip = document.getElementById("tooltip");
+    let activeNode = null;
 
     function search() {
         const value = document.getElementById("search").value.trim();
@@ -67,12 +87,13 @@
 
     function drawGraph(graph) {
         g.selectAll("*").remove();
+        tooltip.style.display = "none";
+        activeNode = null;
 
         const links = (graph.edges || []).map(e => ({ source: e.from, target: e.to, label: e.label }));
         const nodeMap = {};
         (graph.nodes || []).forEach(n => { nodeMap[n.id] = {...n}; });
 
-        // --- Node labelga F yoki D qo‘shib qo‘yamiz
         links.forEach(e => {
             if (e.label === "FOUNDER" && nodeMap[e.source] && nodeMap[e.source].type === "PERSON") {
                 nodeMap[e.source].label += " (F)";
@@ -104,7 +125,31 @@
             .enter().append("circle")
             .attr("r", 20)
             .attr("class", d => (d.type || "").toLowerCase())
-            .call(drag(simulation));
+            .call(drag(simulation))
+            .on("click", (event, d) => {
+                if (activeNode === d.id) {
+                    tooltip.style.display = "none";
+                    activeNode = null;
+                } else {
+                    activeNode = d.id;
+                    // Node bilan bog‘langan edge’larni topamiz
+                    const related = links.filter(l => l.source.id === d.id || l.target.id === d.id);
+                    let info = `<strong>${d.label}</strong><br>Type: ${d.type}<br><br>`;
+                    related.forEach(r => {
+                        if (r.source.id === d.id) {
+                            info += `${r.label} → ${nodeMap[r.target.id]?.label}<br>`;
+                        } else {
+                            info += `${r.label} ← ${nodeMap[r.source.id]?.label}<br>`;
+                        }
+                    });
+                    tooltip.innerHTML = info;
+
+                    const [x, y] = d3.pointer(event, svg.node());
+                    tooltip.style.left = (x + 30) + "px";
+                    tooltip.style.top = (y + 30) + "px";
+                    tooltip.style.display = "block";
+                }
+            });
 
         const label = g.append("g")
             .selectAll("text")
@@ -126,7 +171,6 @@
             label.attr("x", d => d.x).attr("y", d => d.y);
         });
 
-        // highlight qidiruv
         document.getElementById("search").addEventListener("input", function() {
             const text = this.value.toLowerCase();
             node.classed("highlight", d => d.label.toLowerCase().includes(text));
@@ -159,6 +203,8 @@
     function resetHighlight() {
         g.selectAll("circle").classed("highlight", false);
         document.getElementById("search").value = "";
+        tooltip.style.display = "none";
+        activeNode = null;
     }
 
     function zoomIn() {
